@@ -1,32 +1,37 @@
-const aesjs = require('aes-js');
+import * as crypto from 'crypto';
 
-export class AesEncryptor {
-    private static addPadding(messageBytes: Uint8Array): Uint8Array {
-        const byteLengthAfterPadding: number = messageBytes.length + (16 - (messageBytes.length % 16));
-        const bytesAfterPadding: number[] = [];
-        for (let i = 0; i < byteLengthAfterPadding; i++) {
-            if (i < messageBytes.length) {
-                bytesAfterPadding.push(messageBytes[i]);
-            } else {
-                bytesAfterPadding.push(0);
-            }
+
+export class AesManaged {
+    private ENCRYPTION_KEY: string = process.env.ENCRYPTION_KEY; // Must be 256 bits (32 characters)
+    private IV_LENGTH = 16; // For AES, this is always 16
+
+    constructor(key: string) {
+        if (typeof key !== "string") {
+            throw new Error('Encryption key must be a string');
         }
-        return new Uint8Array(bytesAfterPadding);
+        if (key.length !== 32) {
+            throw new Error('Encryption key must be 32 characters or 256 bit in length.');
+        }
+        this.ENCRYPTION_KEY = key;
+
     }
 
-    public static encrypt(message: string, key: Uint8Array, iv: Uint8Array): string {
-        if (key.length !== 128) {
-            throw new Error('Invalid Key Size. Key size must be 128 bit.');
-        } else if (iv.length !== 16) {
-            throw new Error('Invalid Initialization Vector Size.');
-        } else {
-            const encyptor = new aesjs.ModeOfOperation.cbc(key, iv);
-            const paddedMsg = this.addPadding(aesjs.utils.utf8.toBytes(message));
-            const encryptedBytes = encyptor.encrypt(paddedMsg);
-            return aesjs.utils.hex.fromBytes(encryptedBytes);
-        }
+    public encrypt(text: string) {
+        let iv: Buffer = crypto.randomBytes(this.IV_LENGTH);
+        let cipher: crypto.Cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(this.ENCRYPTION_KEY), iv);
+        let encrypted: Buffer = cipher.update(text);
+        encrypted = Buffer.concat([encrypted, cipher.final()]);
+        return iv.toString('hex') + ':' + encrypted.toString('hex');
+    }
 
+    public decrypt(text: string) {
+        let textParts: string[] = text.split(':');
+        let iv: Buffer = Buffer.from(textParts.shift(), 'hex');
+        let encryptedText: Buffer = Buffer.from(textParts.join(':'), 'hex');
+        let decipher: crypto.Decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(this.ENCRYPTION_KEY), iv);
+        let decrypted: Buffer = decipher.update(encryptedText);
+        decrypted = Buffer.concat([decrypted, decipher.final()]);
+
+        return decrypted.toString();
     }
 }
-
-
